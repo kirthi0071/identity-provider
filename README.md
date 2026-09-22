@@ -394,6 +394,790 @@ This ensures user operations are performed against the selected tenant rather th
 
 ---
 
+## 8A. Identity Platform setup — complete setup from zero
+
+This section documents exactly how Identity Platform is configured for this POC, where the tenant ID comes from, where the API key comes from, how Email/Password is enabled, how the backend gets permission, and how users appear in the tenant.
+
+### Step 1 — Select the Google Cloud project
+
+~~~text
+Project ID:
+project-c98d2dac-2409-44bd-aba
+
+Project number:
+785312592182
+~~~
+
+All Identity Platform resources for this POC are created under this Google Cloud project.
+
+Billing must be enabled before using the relevant Google Cloud services. Google documents Identity Platform setup as a project-level configuration.
+
+### Step 2 — Enable the Identity Platform API
+
+In Google Cloud Console:
+
+~~~text
+Google Cloud Console
+  ↓
+APIs & Services
+  ↓
+Library
+  ↓
+Search: Identity Platform API
+  ↓
+Enable
+~~~
+
+Also verify the supporting APIs used by this project:
+
+- Cloud Run API
+- Artifact Registry API
+- Secret Manager API
+- IAM API
+- Service Usage API
+
+### Step 3 — Open Identity Platform
+
+In Google Cloud Console:
+
+~~~text
+Identity Platform
+~~~
+
+The Identity Platform area is used to configure:
+
+- Project authentication settings
+- Identity providers
+- Tenants
+- Users
+- Application setup details
+- Tenant-scoped users and providers
+
+### Step 4 — Enable multi-tenancy
+
+Go to:
+
+~~~text
+Identity Platform
+  ↓
+Settings
+  ↓
+Security
+  ↓
+Multi-tenancy
+  ↓
+Allow tenants
+~~~
+
+After enabling tenants, the Tenants page becomes available.
+
+Google documents that multi-tenancy setup requires permissions such as firebaseauth.configs.update and identitytoolkit.tenants.create; the Identity Platform Admin role can provide the required setup permissions.
+
+### Step 5 — Create a tenant
+
+Go to:
+
+~~~text
+Identity Platform
+  ↓
+Tenants
+  ↓
+Add tenant
+~~~
+
+For this POC:
+
+~~~text
+Display name:
+India
+
+Tenant ID:
+India-p9rv0
+~~~
+
+The tenant ID is the technical identifier used by the backend. The display name is the human-readable name.
+
+Important:
+
+~~~text
+Tenant display name = human-readable name
+
+Tenant ID = technical identifier used by backend
+~~~
+
+Each tenant has its own users and identity-provider configuration.
+
+### Step 6 — Select the tenant before configuring tenant-specific settings
+
+When working with the tenant in the Google Cloud Console:
+
+~~~text
+Identity Platform
+  ↓
+Select / Scope to tenant
+  ↓
+India
+~~~
+
+After selecting the tenant, configure the tenant's providers and inspect its users.
+
+This prevents accidentally configuring or inspecting the project-level user pool when the application is using a tenant.
+
+### Step 7 — Enable Email/Password for the tenant
+
+For this POC, Email/Password is the Identity Platform password provider.
+
+Configure it in the tenant scope:
+
+~~~text
+Identity Platform
+  ↓
+Identity Providers
+  ↓
+Email/Password
+  ↓
+Enable
+  ↓
+Save
+~~~
+
+Why this is required:
+
+~~~text
++919344160867
+       ↓
+9344160867@identity-provider.invalid
+       ↓
+Identity Platform Email/Password
+~~~
+
+Twilio handles initial phone ownership verification. Identity Platform handles password authentication.
+
+### Step 8 — Get the Identity Platform API key
+
+The backend uses the Identity Platform REST API for password sign-in.
+
+Google's REST API documentation says to obtain the API key from Application setup details.
+
+Go to:
+
+~~~text
+Identity Platform
+  ↓
+Identity Providers / Users area
+  ↓
+Application setup details
+  ↓
+Copy apiKey
+~~~
+
+The value looks conceptually like:
+
+~~~text
+AIza...
+~~~
+
+Never put the real key in this README.
+
+### Step 9 — Understand what the API key is used for
+
+There are two separate authentication mechanisms:
+
+~~~text
+Identity Platform API key
+        ↓
+Identity Platform REST authentication endpoints
+        ↓
+accounts:signInWithPassword
+
+Service account / IAM
+        ↓
+Firebase Admin SDK
+        ↓
+Tenant user management
+~~~
+
+In this POC:
+
+- Admin SDK uses Cloud Run's runtime service account through Application Default Credentials.
+- REST password sign-in uses the Identity Platform API key.
+- The API key does not replace IAM.
+- IAM does not replace the API key for the REST endpoint.
+
+### Step 10 — Store the Identity Platform API key in Secret Manager
+
+Create:
+
+~~~text
+Secret name:
+identity-platform-api-key
+~~~
+
+Console:
+
+~~~text
+Secret Manager
+  ↓
+Create secret
+  ↓
+Name: identity-platform-api-key
+  ↓
+Add secret value
+  ↓
+Create
+~~~
+
+Cloud Run receives it as:
+
+~~~text
+IDENTITY_PLATFORM_API_KEY
+~~~
+
+The deployment workflow maps:
+
+~~~text
+IDENTITY_PLATFORM_API_KEY
+    ↓
+identity-platform-api-key:latest
+~~~
+
+The backend reads the value from its environment.
+
+The key is not committed to GitHub.
+
+### Step 11 — Create the runtime service account
+
+Create:
+
+~~~text
+identity-provider-runtime
+~~~
+
+Full service account:
+
+~~~text
+identity-provider-runtime@project-c98d2dac-2409-44bd-aba.iam.gserviceaccount.com
+~~~
+
+This is the identity used by the running Cloud Run backend.
+
+Do not use the GitHub deployment service account as the application runtime identity.
+
+### Step 12 — Grant Identity Platform IAM permission
+
+Grant the runtime service account:
+
+~~~text
+roles/identitytoolkit.admin
+~~~
+
+Conceptually:
+
+~~~text
+Cloud Run backend
+      ↓
+Runtime service account
+      ↓
+Identity Toolkit Admin
+      ↓
+Identity Platform
+~~~
+
+Example:
+
+~~~bash
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:identity-provider-runtime@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/identitytoolkit.admin"
+~~~
+
+Google documents Identity Toolkit Admin for server-side Admin SDK usage.
+
+### Step 13 — Grant Secret Manager access
+
+Grant the runtime service account:
+
+~~~text
+roles/secretmanager.secretAccessor
+~~~
+
+It needs access to:
+
+~~~text
+twilio-account-sid
+twilio-auth-token
+twilio-verify-service-sid
+identity-platform-api-key
+otp-session-secret
+~~~
+
+Conceptually:
+
+~~~text
+Cloud Run
+   ↓
+Runtime Service Account
+   ↓
+Secret Manager Secret Accessor
+   ↓
+Application secrets
+~~~
+
+### Step 14 — Configure Cloud Run with the runtime service account
+
+The backend Cloud Run deployment uses:
+
+~~~text
+--service-account identity-provider-runtime@project-c98d2dac-2409-44bd-aba.iam.gserviceaccount.com
+~~~
+
+The backend initializes Firebase Admin with Application Default Credentials:
+
+~~~javascript
+if (!getApps().length) initializeApp();
+~~~
+
+No downloaded service-account JSON file is required.
+
+Credential flow:
+
+~~~text
+Cloud Run
+   ↓
+Attached runtime service account
+   ↓
+Application Default Credentials
+   ↓
+Firebase Admin SDK
+   ↓
+Identity Platform
+~~~
+
+### Step 15 — Configure the tenant ID in Cloud Run
+
+The backend requires:
+
+~~~text
+IDENTITY_PLATFORM_TENANT_ID
+~~~
+
+Current POC value:
+
+~~~text
+India-p9rv0
+~~~
+
+GitHub Actions deploys this value as an environment variable.
+
+The backend reads the environment variable and passes the tenant ID to the tenant-aware Admin SDK and REST authentication request.
+
+The tenant ID is configuration, not a secret.
+
+Do not blindly accept an arbitrary tenant ID from an untrusted frontend.
+
+### Step 16 — Install and initialize the Admin SDK
+
+The backend uses the Firebase Admin SDK.
+
+Initialization:
+
+~~~javascript
+if (!getApps().length) initializeApp();
+~~~
+
+Tenant selection:
+
+~~~javascript
+const tenantAuth =
+  getAuth().tenantManager().authForTenant(tenantId);
+~~~
+
+The important point is that authForTenant creates a tenant-aware authentication client.
+
+### Step 17 — How a user is created
+
+The user is normally NOT manually created in the Identity Platform console.
+
+The application creates the user after successful Twilio OTP verification.
+
+Complete flow:
+
+~~~text
+User enters phone
+       ↓
+POST /auth/send-otp
+       ↓
+Twilio sends SMS
+       ↓
+POST /auth/verify-otp
+       ↓
+Twilio approves OTP
+       ↓
+Backend creates signed OTP session
+       ↓
+POST /auth/register
+       ↓
+Backend gets tenantAuth
+       ↓
+getUserByPhoneNumber(phone)
+       ↓
+If user does not exist
+       ↓
+tenantAuth.createUser(...)
+       ↓
+Identity Platform creates UID
+~~~
+
+The user is created with:
+
+~~~text
+email:
+9344160867@identity-provider.invalid
+
+phoneNumber:
++919344160867
+
+password:
+user-provided password
+
+disabled:
+false
+~~~
+
+Identity Platform generates a unique UID if the backend does not explicitly provide one.
+
+### Step 18 — How the user appears in the console
+
+After successful registration:
+
+~~~text
+Identity Platform
+   ↓
+Users
+   ↓
+Scope to tenant
+   ↓
+India
+~~~
+
+The newly created user appears under that tenant.
+
+The user record includes Identity Platform-managed information such as:
+
+- UID
+- Email
+- Phone number
+- Account/provider information
+- Account status
+
+The UID is generated by Identity Platform unless the backend explicitly supplies one.
+
+Important tenant isolation model:
+
+~~~text
+Tenant A
+  └── User A
+
+Tenant B
+  └── User B
+~~~
+
+Tenant-aware user operations keep users in the intended tenant.
+
+### Step 19 — How login finds the user
+
+The user never enters the internal email.
+
+The user enters:
+
+~~~text
+Phone:
+9344160867
+
+Password:
+********
+~~~
+
+Backend flow:
+
+~~~text
+phone
+  ↓
+normalizePhone()
+  ↓
+tenantAuth.getUserByPhoneNumber(phone)
+  ↓
+Identity Platform user record
+  ↓
+user.email
+  ↓
+9344160867@identity-provider.invalid
+  ↓
+accounts:signInWithPassword
+  ↓
+tenantId + email + password
+  ↓
+ID token + refresh token
+~~~
+
+### Step 20 — Identity Platform API key vs Admin credentials
+
+Keep this distinction clear:
+
+| Component | Credential | Purpose |
+|---|---|---|
+| Cloud Run runtime | Runtime service account | Google IAM / Admin SDK access |
+| Firebase Admin SDK | Application Default Credentials | Tenant user management |
+| Identity Platform REST API | API key | Password sign-in REST endpoint |
+| Twilio | Account SID + Auth Token | Twilio API authentication |
+| GitHub Actions | WIF/OIDC | CI/CD authentication |
+| Secret Manager | IAM permission | Runtime secret access |
+
+The POC does not download or store a Google service-account JSON key in the repository or container.
+
+### Step 21 — API key security
+
+The Identity Platform API key is not a replacement for IAM.
+
+Where practical, manage the key using Google Cloud API key controls and restrict its use to the required APIs. The application still relies on IAM for Admin SDK operations.
+
+For this POC:
+
+~~~text
+API key
+  ↓
+Secret Manager
+  ↓
+Cloud Run environment variable
+  ↓
+Backend REST request
+~~~
+
+Never expose the real key in logs, GitHub, README files or screenshots.
+
+### Step 22 — What happens if the tenant changes
+
+If the POC changes from:
+
+~~~text
+India-p9rv0
+~~~
+
+to another tenant:
+
+~~~text
+CustomerB-xxxx
+~~~
+
+the current implementation requires changing:
+
+~~~text
+IDENTITY_PLATFORM_TENANT_ID
+~~~
+
+This is the limitation that the future dynamic tenant architecture is intended to remove.
+
+For multiple customers, the future design should resolve:
+
+~~~text
+customer
+   ↓
+trusted tenant configuration
+   ↓
+tenantId
+   ↓
+authForTenant(tenantId)
+~~~
+
+Identity Platform supports programmatic tenant create/list/get/update/delete operations through the Admin SDK.
+
+### Step 23 — Tenant-level IAM
+
+Identity Platform also supports IAM access control at the tenant resource level.
+
+For organizations that need different administrators to manage different tenants:
+
+~~~text
+Identity Platform
+  ↓
+Tenants
+  ↓
+Select tenant
+  ↓
+Permissions
+~~~
+
+This is separate from the runtime service account permission used by the backend.
+
+### Step 24 — Identity Platform setup verification checklist
+
+~~~text
+[ ] Correct Google Cloud project selected
+[ ] Billing enabled
+[ ] Identity Platform API enabled
+[ ] Multi-tenancy enabled
+[ ] India tenant exists
+[ ] Tenant ID recorded
+[ ] Tenant scope selected
+[ ] Email/Password enabled for tenant
+[ ] Application setup details available
+[ ] Identity Platform API key obtained
+[ ] API key stored in Secret Manager
+[ ] Runtime service account created
+[ ] roles/identitytoolkit.admin granted
+[ ] roles/secretmanager.secretAccessor granted
+[ ] Cloud Run uses runtime service account
+[ ] IDENTITY_PLATFORM_TENANT_ID configured
+[ ] Firebase Admin SDK initialized with ADC
+[ ] Backend can call tenantAuth
+[ ] Backend can create tenant users
+[ ] Backend can look up users by phone
+[ ] REST signInWithPassword works with tenantId
+[ ] User appears under the correct tenant
+[ ] Login returns authentication tokens
+~~~
+
+### Step 25 — Common Identity Platform mistakes
+
+#### Tenant ID missing
+
+Symptom:
+
+~~~text
+Identity Platform tenant is not configured
+~~~
+
+Check Cloud Run environment variables for IDENTITY_PLATFORM_TENANT_ID.
+
+#### Email/Password disabled
+
+Symptom:
+
+Password authentication fails.
+
+Check the selected tenant's Identity Providers configuration and enable Email/Password.
+
+#### Wrong tenant scope
+
+A user may exist but not under the tenant currently selected in the console.
+
+Always check:
+
+~~~text
+Identity Platform → Users → Scope to tenant
+~~~
+
+#### Runtime service account lacks Identity Toolkit Admin
+
+Symptom:
+
+Admin SDK user-management calls fail with authorization errors.
+
+Check:
+
+~~~text
+IAM
+  ↓
+identity-provider-runtime
+  ↓
+roles/identitytoolkit.admin
+~~~
+
+#### Secret Manager permission missing
+
+Symptom:
+
+Cloud Run starts but cannot access Twilio, API-key or OTP secrets.
+
+Check:
+
+~~~text
+Runtime service account
+  ↓
+roles/secretmanager.secretAccessor
+~~~
+
+#### API key missing
+
+Symptom:
+
+REST password sign-in fails.
+
+Check:
+
+~~~text
+Secret Manager
+  ↓
+identity-platform-api-key
+  ↓
+Cloud Run
+  ↓
+IDENTITY_PLATFORM_API_KEY
+~~~
+
+#### Unnecessary service-account JSON key
+
+Do not put a Google service-account JSON key into the repository or Docker image for this Cloud Run workload.
+
+Use the attached Cloud Run runtime service account and Application Default Credentials.
+
+### Step 26 — Identity Platform setup summary
+
+~~~text
+Google Cloud Project
+        ↓
+Enable Identity Platform API
+        ↓
+Enable multi-tenancy
+        ↓
+Create tenant
+        ↓
+India
+India-p9rv0
+        ↓
+Select tenant scope
+        ↓
+Enable Email/Password
+        ↓
+Application setup details
+        ↓
+Copy API key
+        ↓
+Store API key in Secret Manager
+        ↓
+Create runtime service account
+        ↓
+Grant Identity Toolkit Admin
+        ↓
+Grant Secret Manager Secret Accessor
+        ↓
+Attach runtime SA to Cloud Run
+        ↓
+Set IDENTITY_PLATFORM_TENANT_ID
+        ↓
+Firebase Admin SDK uses ADC
+        ↓
+tenantAuth = authForTenant(tenantId)
+        ↓
+Twilio verifies phone
+        ↓
+Backend creates tenant user
+        ↓
+Identity Platform generates UID
+        ↓
+User appears under tenant
+        ↓
+Phone + password login
+        ↓
+REST signInWithPassword + tenantId
+        ↓
+ID token + refresh token
+~~~
+
+This section is the source-of-truth setup procedure for reproducing the Identity Platform portion of the POC.
+
+---
+
 ## 9. Google Cloud resources
 
 ### Project
