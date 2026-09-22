@@ -10,13 +10,13 @@ permissions:
   id-token: write
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  REGION: ${{ vars.GCP_REGION }}
-  REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
-  DEPLOY_SA: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-  WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
-  BACKEND_SERVICE: ${{ vars.BACKEND_SERVICE_NAME }}
-  FRONTEND_SERVICE: ${{ vars.FRONTEND_SERVICE_NAME }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION }}
+  REPOSITORY: ${{ secrets.GCP_ARTIFACT_REPOSITORY }}
+  DEPLOY_SA: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+  WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+  BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE_NAME }}
+  FRONTEND_SERVICE: ${{ secrets.FRONTEND_SERVICE_NAME }}
   RUNTIME_SA: identity-provider-runtime@project-c98d2dac-2409-44bd-aba.iam.gserviceaccount.com
 
 jobs:
