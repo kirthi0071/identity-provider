@@ -23,3 +23,6 @@ Required GitHub Actions variables:
 - TENANT_ID
 
 The workflow also verifies the active identity before deploying.
+
+
+<!-- Deployment trigger: Twilio Verify + Secret Manager integration -->
