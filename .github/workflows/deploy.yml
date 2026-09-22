@@ -51,9 +51,6 @@ jobs:
             --location="${REGION}" \
             --project="${PROJECT_ID}" \
             --format="value(name)"
-          gcloud secrets describe twilio-account-sid --project="${PROJECT_ID}" --format="value(name)"
-          gcloud secrets describe twilio-auth-token --project="${PROJECT_ID}" --format="value(name)"
-          gcloud secrets describe twilio-verify-service-sid --project="${PROJECT_ID}" --format="value(name)"
           echo "Runtime service account configured: ${RUNTIME_SA}"
 
       - name: Configure Docker auth
