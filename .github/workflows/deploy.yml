@@ -51,6 +51,9 @@ jobs:
             --location="${REGION}" \
             --project="${PROJECT_ID}" \
             --format="value(name)"
+          gcloud secrets describe twilio-account-sid --project="${PROJECT_ID}" --format="value(name)"
+          gcloud secrets describe twilio-auth-token --project="${PROJECT_ID}" --format="value(name)"
+          gcloud secrets describe twilio-verify-service-sid --project="${PROJECT_ID}" --format="value(name)"
           echo "Runtime service account configured: ${RUNTIME_SA}"
 
       - name: Configure Docker auth
@@ -73,6 +76,7 @@ jobs:
             --region "${REGION}" \
             --platform managed \
             --service-account "${RUNTIME_SA}" \
+            --set-secrets "TWILIO_ACCOUNT_SID=twilio-account-sid:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest,TWILIO_VERIFY_SERVICE_SID=twilio-verify-service-sid:latest" \
             --allow-unauthenticated
 
       - name: Resolve backend URL
