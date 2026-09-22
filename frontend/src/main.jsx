@@ -10,6 +10,8 @@ function App() {
   const [password, setPassword] = React.useState("");
   const [otpSent, setOtpSent] = React.useState(false);
   const [otpVerified, setOtpVerified] = React.useState(false);
+  const [otpToken, setOtpToken] = React.useState("");
+  const [mode, setMode] = React.useState("login");
   const [status, setStatus] = React.useState("Ready");
   const [busy, setBusy] = React.useState(false);
 
@@ -36,6 +38,7 @@ function App() {
       const data = await callApi("/auth/send-otp", { phone });
       setOtpSent(true);
       setOtpVerified(false);
+      setOtpToken("");
       setStatus(`OTP sent to ${data.to}`);
     } catch (error) {
       setStatus(error.message);
@@ -55,7 +58,50 @@ function App() {
       }
 
       setOtpVerified(true);
-      setStatus("Phone verified successfully");
+      setOtpToken(data.otpToken);
+      setStatus("Phone verified successfully. Create your password.");
+      setMode("register");
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function register() {
+    if (!otpVerified || !otpToken) {
+      setStatus("Verify the phone with OTP first.");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("Creating Identity Platform account...");
+    try {
+      const data = await callApi("/auth/register", {
+        phone,
+        password,
+        otpToken
+      });
+
+      setStatus(`Account created successfully. UID: ${data.uid}`);
+      setOtpSent(false);
+      setOtpVerified(false);
+      setOtpToken("");
+      setOtp("");
+      setMode("login");
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function login() {
+    setBusy(true);
+    setStatus("Signing in...");
+    try {
+      const data = await callApi("/auth/login", { phone, password });
+      setStatus(`Login successful • Tenant: ${data.tenantId} • UID: ${data.uid}`);
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -71,20 +117,12 @@ function App() {
       const data = await response.json();
       setStatus(
         data.status === "ok"
-          ? `Backend is healthy • Twilio: ${data.twilioConfigured ? "configured" : "not configured"}`
+          ? `Backend healthy • Twilio: ${data.twilioConfigured ? "configured" : "not configured"} • Identity Platform: ${data.identityPlatformConfigured ? "configured" : "not configured"}`
           : "Backend responded"
       );
     } catch {
       setStatus("Backend connection failed");
     }
-  }
-
-  function signIn() {
-    setStatus(
-      otpVerified
-        ? "OTP verified. Identity Platform password login will be added next."
-        : "For first registration, verify the phone with OTP first."
-    );
   }
 
   return (
@@ -136,9 +174,15 @@ function App() {
           placeholder="••••••••"
         />
 
-        <button type="button" onClick={signIn} disabled={busy}>
-          {otpVerified ? "Continue" : "Sign in"}
-        </button>
+        {otpVerified && mode === "register" ? (
+          <button type="button" onClick={register} disabled={busy || password.length < 8}>
+            Create account
+          </button>
+        ) : (
+          <button type="button" onClick={login} disabled={busy || !phone || !password}>
+            Sign in
+          </button>
+        )}
 
         <button type="button" className="secondary" onClick={checkBackend}>
           Check backend
@@ -147,8 +191,8 @@ function App() {
         <div className="status">{status}</div>
 
         <small>
-          Twilio SMS OTP is enabled for the POC. Identity Platform tenant
-          registration and password login are the next phase.
+          First registration: phone → Twilio OTP → Identity Platform tenant account.
+          Returning users: phone + password → Identity Platform.
         </small>
       </section>
     </main>
