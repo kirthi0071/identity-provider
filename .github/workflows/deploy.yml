@@ -1,0 +1,81 @@
+name: Deploy Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+  DEPLOY_SA: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+  WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+  BACKEND_SERVICE: ${{ vars.BACKEND_SERVICE_NAME }}
+  FRONTEND_SERVICE: ${{ vars.FRONTEND_SERVICE_NAME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud with WIF
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify WIF impersonation
+        run: |
+          set -euo pipefail
+          gcloud auth list
+          gcloud config set project "${PROJECT_ID}"
+          gcloud iam service-accounts describe "${DEPLOY_SA}"             --project="${PROJECT_ID}"             --format="value(email)"
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push backend
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:${GITHUB_SHA}"
+          docker build -t "${IMAGE}" ./backend
+          docker push "${IMAGE}"
+          echo "BACKEND_IMAGE=${IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Deploy backend
+        run: |
+          gcloud run deploy "${BACKEND_SERVICE}"             --image "${BACKEND_IMAGE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --platform managed             --allow-unauthenticated
+
+      - name: Resolve backend URL
+        id: backend
+        run: |
+          URL="$(gcloud run services describe "${BACKEND_SERVICE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --format='value(status.url)')"
+          echo "url=${URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push frontend
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/frontend:${GITHUB_SHA}"
+          docker build             --build-arg VITE_BACKEND_URL="${{ steps.backend.outputs.url }}"             -t "${IMAGE}" ./frontend
+          docker push "${IMAGE}"
+          echo "FRONTEND_IMAGE=${IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Deploy frontend
+        run: |
+          gcloud run deploy "${FRONTEND_SERVICE}"             --image "${FRONTEND_IMAGE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --platform managed             --allow-unauthenticated
+
+      - name: Smoke test
+        run: |
+          BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --format='value(status.url)')"
+          curl --fail --silent --show-error "${BACKEND_URL}/health"
+          echo
