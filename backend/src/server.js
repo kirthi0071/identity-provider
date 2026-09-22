@@ -264,7 +264,6 @@ app.post("/auth/register", async (req, res) => {
       email,
       password,
       phoneNumber: phone,
-      phoneNumberVerified: true,
       disabled: false
     });
 
