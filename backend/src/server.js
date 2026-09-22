@@ -41,9 +41,12 @@ function normalizePhone(value) {
   throw new Error("Enter a valid Indian phone number, for example +919876543210");
 }
 
+// Identity Platform password sign-in uses email/password.
+// We use the normalized 10-digit phone number as the internal email local part.
+// Example: +919344160867 -> 9344160867@identity-provider.invalid
 function phoneToInternalEmail(phone) {
-  const digest = crypto.createHash("sha256").update(phone).digest("hex");
-  return `phone-${digest}@identity-provider.invalid`;
+  const digits = phone.replace(/^\+91/, "");
+  return `${digits}@identity-provider.invalid`;
 }
 
 function createOtpSession(phone) {
