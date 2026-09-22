@@ -17,6 +17,7 @@ env:
   WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
   BACKEND_SERVICE: ${{ vars.BACKEND_SERVICE_NAME }}
   FRONTEND_SERVICE: ${{ vars.FRONTEND_SERVICE_NAME }}
+  RUNTIME_SA: identity-provider-runtime@project-c98d2dac-2409-44bd-aba.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -41,13 +42,27 @@ jobs:
           set -euo pipefail
           gcloud auth list
           gcloud config set project "${PROJECT_ID}"
-          gcloud iam service-accounts describe "${DEPLOY_SA}"             --project="${PROJECT_ID}"             --format="value(email)"
+          gcloud iam service-accounts describe "${DEPLOY_SA}" \
+            --project="${PROJECT_ID}" \
+            --format="value(email)"
+
+      - name: Verify deployment prerequisites
+        run: |
+          set -euo pipefail
+          gcloud artifacts repositories describe "${REPOSITORY}" \
+            --location="${REGION}" \
+            --project="${PROJECT_ID}" \
+            --format="value(name)"
+          gcloud iam service-accounts describe "${RUNTIME_SA}" \
+            --project="${PROJECT_ID}" \
+            --format="value(email)"
 
       - name: Configure Docker auth
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: Build and push backend
         run: |
+          set -euo pipefail
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:${GITHUB_SHA}"
           docker build -t "${IMAGE}" ./backend
           docker push "${IMAGE}"
@@ -55,27 +70,53 @@ jobs:
 
       - name: Deploy backend
         run: |
-          gcloud run deploy "${BACKEND_SERVICE}"             --image "${BACKEND_IMAGE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --platform managed             --allow-unauthenticated
+          set -euo pipefail
+          gcloud run deploy "${BACKEND_SERVICE}" \
+            --image "${BACKEND_IMAGE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --platform managed \
+            --service-account "${RUNTIME_SA}" \
+            --allow-unauthenticated
 
       - name: Resolve backend URL
         id: backend
         run: |
-          URL="$(gcloud run services describe "${BACKEND_SERVICE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --format='value(status.url)')"
+          set -euo pipefail
+          URL="$(gcloud run services describe "${BACKEND_SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)')"
           echo "url=${URL}" >> "${GITHUB_OUTPUT}"
+          echo "Backend URL: ${URL}"
 
       - name: Build and push frontend
         run: |
+          set -euo pipefail
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/frontend:${GITHUB_SHA}"
-          docker build             --build-arg VITE_BACKEND_URL="${{ steps.backend.outputs.url }}"             -t "${IMAGE}" ./frontend
+          docker build \
+            --build-arg VITE_BACKEND_URL="${{ steps.backend.outputs.url }}" \
+            -t "${IMAGE}" ./frontend
           docker push "${IMAGE}"
           echo "FRONTEND_IMAGE=${IMAGE}" >> "${GITHUB_ENV}"
 
       - name: Deploy frontend
         run: |
-          gcloud run deploy "${FRONTEND_SERVICE}"             --image "${FRONTEND_IMAGE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --platform managed             --allow-unauthenticated
+          set -euo pipefail
+          gcloud run deploy "${FRONTEND_SERVICE}" \
+            --image "${FRONTEND_IMAGE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --platform managed \
+            --service-account "${RUNTIME_SA}" \
+            --allow-unauthenticated
 
-      - name: Smoke test
+      - name: Smoke test backend
         run: |
-          BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --format='value(status.url)')"
+          set -euo pipefail
+          BACKEND_URL="$(gcloud run services describe "${BACKEND_SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)')"
           curl --fail --silent --show-error "${BACKEND_URL}/health"
           echo
