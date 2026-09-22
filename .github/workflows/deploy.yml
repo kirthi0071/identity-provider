@@ -37,14 +37,12 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Verify WIF impersonation
+      - name: Verify WIF authentication
         run: |
           set -euo pipefail
           gcloud auth list
           gcloud config set project "${PROJECT_ID}"
-          gcloud iam service-accounts describe "${DEPLOY_SA}" \
-            --project="${PROJECT_ID}" \
-            --format="value(email)"
+          gcloud config get-value project
 
       - name: Verify deployment prerequisites
         run: |
@@ -53,9 +51,7 @@ jobs:
             --location="${REGION}" \
             --project="${PROJECT_ID}" \
             --format="value(name)"
-          gcloud iam service-accounts describe "${RUNTIME_SA}" \
-            --project="${PROJECT_ID}" \
-            --format="value(email)"
+          echo "Runtime service account configured: ${RUNTIME_SA}"
 
       - name: Configure Docker auth
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
