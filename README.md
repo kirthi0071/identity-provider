@@ -57,3 +57,5 @@ Google's tenant documentation confirms that tenants have their own users and ide
 6. Click Create account.
 7. Sign in later with the same phone + password without OTP.
 
+
+<!-- CI redeploy trigger: 2026-09-22T06:34:25.708Z -->
