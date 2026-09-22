@@ -73,7 +73,8 @@ jobs:
             --region "${REGION}" \
             --platform managed \
             --service-account "${RUNTIME_SA}" \
-            --set-secrets "TWILIO_ACCOUNT_SID=twilio-account-sid:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest,TWILIO_VERIFY_SERVICE_SID=twilio-verify-service-sid:latest" \
+            --set-env-vars "IDENTITY_PLATFORM_TENANT_ID=${{ secrets.TENANT_ID }}" \
+            --set-secrets "TWILIO_ACCOUNT_SID=twilio-account-sid:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest,TWILIO_VERIFY_SERVICE_SID=twilio-verify-service-sid:latest,IDENTITY_PLATFORM_API_KEY=identity-platform-api-key:latest,OTP_SESSION_SECRET=otp-session-secret:latest" \
             --allow-unauthenticated
 
       - name: Resolve backend URL
