@@ -18,6 +18,7 @@ env:
   BACKEND_SERVICE: ${{ secrets.BACKEND_SERVICE_NAME }}
   FRONTEND_SERVICE: ${{ secrets.FRONTEND_SERVICE_NAME }}
   RUNTIME_SA: identity-provider-runtime@project-c98d2dac-2409-44bd-aba.iam.gserviceaccount.com
+  TENANT_ID: India-p9rv0
 
 jobs:
   deploy:
@@ -73,7 +74,7 @@ jobs:
             --region "${REGION}" \
             --platform managed \
             --service-account "${RUNTIME_SA}" \
-            --set-env-vars "IDENTITY_PLATFORM_TENANT_ID=${{ secrets.TENANT_ID }}" \
+            --set-env-vars "IDENTITY_PLATFORM_TENANT_ID=${TENANT_ID}" \
             --set-secrets "TWILIO_ACCOUNT_SID=twilio-account-sid:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest,TWILIO_VERIFY_SERVICE_SID=twilio-verify-service-sid:latest,IDENTITY_PLATFORM_API_KEY=identity-platform-api-key:latest,OTP_SESSION_SECRET=otp-session-secret:latest" \
             --allow-unauthenticated
 
