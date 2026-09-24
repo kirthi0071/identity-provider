@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vodafone + Identity Platform POC</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;padding:0 20px}input,button{padding:10px;margin:5px 0;width:100%;box-sizing:border-box}pre{background:#f4f4f4;padding:12px;overflow:auto}.step{border:1px solid #ddd;padding:16px;margin:12px 0;border-radius:8px}</style>
+</head>
+<body>
+<h1>Vodafone + Identity Platform POC</h1>
+<p>The default provider is MOCK. Replace it with the real Vodafone/Vi adapter only after receiving the customer API contract.</p>
+<div class="step"><h2>1. Mobile</h2><input id="phone" placeholder="9344160867"><button id="sendOtp">Send OTP</button><pre id="sendResult"></pre></div>
+<div class="step"><h2>2. OTP</h2><input id="otp" placeholder="123456"><button id="verifyOtp">Verify OTP + Sign In</button><pre id="verifyResult"></pre></div>
+<div class="step"><h2>3. Session</h2><pre id="session">Not signed in</pre></div>
+<script>
+const firebaseConfig={apiKey:"REPLACE_WITH_IDENTITY_PLATFORM_WEB_API_KEY",authDomain:"REPLACE_WITH_AUTH_DOMAIN",projectId:"project-c98d2dac-2409-44bd-aba"};
+const auth=firebase.initializeApp(firebaseConfig).auth();
+auth.tenantId="India-p9rv0";
+let challengeId=null;
+const sendResult=document.getElementById("sendResult");
+const verifyResult=document.getElementById("verifyResult");
+const session=document.getElementById("session");
+
+document.getElementById("sendOtp").onclick=async()=>{try{const phoneNumber=document.getElementById("phone").value;const r=await fetch("/auth/otp/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phoneNumber})});const d=await r.json();if(!r.ok)throw new Error(d.error||"OTP request failed");challengeId=d.challengeId;sendResult.textContent=JSON.stringify(d,null,2)}catch(e){sendResult.textContent=e.message}};
+
+document.getElementById("verifyOtp").onclick=async()=>{try{if(!challengeId)throw new Error("Send OTP first");const otp=document.getElementById("otp").value;const r=await fetch("/auth/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({challengeId,otp})});const d=await r.json();if(!r.ok)throw new Error(d.error||"OTP verification failed");auth.tenantId=d.tenantId;const credential=await auth.signInWithCustomToken(d.customToken);const idToken=await credential.user.getIdToken();verifyResult.textContent=JSON.stringify({ok:true,uid:credential.user.uid,tenantId:credential.user.tenantId},null,2);session.textContent=JSON.stringify({signedIn:true,uid:credential.user.uid,tenantId:credential.user.tenantId,idTokenAvailable:Boolean(idToken)},null,2)}catch(e){verifyResult.textContent=e.message}};
+</script>
+</body></html>
